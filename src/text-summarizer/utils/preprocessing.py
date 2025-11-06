@@ -70,13 +70,19 @@ class FeatureScaler:
         # If fitted with DataFrame, ensure transform also uses DataFrame
         if self._fitted_with_dataframe:
             if isinstance(X, np.ndarray):
+                # Validate array dimensions
+                if X.ndim != 2:
+                    raise ValueError(
+                        f"Expected 2D array, got {X.ndim}D array instead"
+                    )
+                
                 # Convert numpy array to DataFrame with stored feature names
                 if self._feature_names is not None and X.shape[1] == len(self._feature_names):
                     X = pd.DataFrame(X, columns=self._feature_names)
                 else:
                     raise ValueError(
                         f"Cannot transform: Expected {len(self._feature_names) if self._feature_names else 'unknown'} "
-                        f"features, got {X.shape[1] if X.ndim > 1 else 1}"
+                        f"features, got {X.shape[1]}"
                     )
             elif isinstance(X, pd.DataFrame):
                 # Ensure column names match
@@ -180,8 +186,23 @@ def fix_standardscaler_warning_alternative(
         from sklearn import __version__
         
         # Check if set_output is available (sklearn >= 1.2)
-        major, minor = map(int, __version__.split('.')[:2])
-        if major > 1 or (major == 1 and minor >= 2):
+        # Use robust version parsing
+        try:
+            from packaging import version
+            sklearn_version = version.parse(__version__)
+            has_set_output = sklearn_version >= version.parse("1.2.0")
+        except ImportError:
+            # Fallback to simple parsing if packaging is not available
+            try:
+                version_parts = __version__.split('.')
+                major = int(version_parts[0].split('rc')[0].split('a')[0].split('b')[0])
+                minor = int(version_parts[1].split('rc')[0].split('a')[0].split('b')[0]) if len(version_parts) > 1 else 0
+                has_set_output = major > 1 or (major == 1 and minor >= 2)
+            except (ValueError, IndexError):
+                # If parsing fails, assume set_output is not available
+                has_set_output = False
+        
+        if has_set_output:
             scaler = StandardScaler().set_output(transform="pandas")
             
             # Convert test to DataFrame if needed
